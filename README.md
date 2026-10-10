@@ -20,7 +20,8 @@ entry that is fresher than the 90 s TTL (the TTL only matters after a crash).
 
 ```
 node scripts/build.mjs       # src/ -> dist/plugin.js (inlines presence.js)
-node scripts/install.mjs     # copy to ~/.hermes/desktop-plugins/open-elsewhere/
+node scripts/install.mjs     # copy to <hermes home>/desktop-plugins/open-elsewhere/
+                             # (Windows: %LOCALAPPDATA%hermes, else ~/.hermes)
 node --test test/plugin.test.mjs test/presence.test.mjs
 ```
 
