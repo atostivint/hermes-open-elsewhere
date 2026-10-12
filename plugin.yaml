@@ -1,0 +1,11 @@
+# open-elsewhere: tell the Desktop which sessions another client already holds.
+# Backend half = dashboard/plugin_api.py (read-only route); Desktop half = desktop/plugin.js.
+name: open-elsewhere
+id: open-elsewhere
+kind: standalone
+version: 0.2.0
+description: >
+  Marks a session in the Desktop sidebar when it is open in another Hermes window or
+  another client (iPhone app, terminal, messaging gateway), before sending into it is
+  refused with SESSION_NOT_OWNED.
+provides: []

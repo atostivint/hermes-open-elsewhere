@@ -1,4 +1,4 @@
-// Inlines src/presence.js into src/plugin.src.js -> dist/plugin.js. The runtime
+// Inlines src/presence.js into src/plugin.src.js -> desktop/plugin.js. The runtime
 // loader reads ONE plugin.js and rewrites only SDK/react specifiers, so a
 // relative import would not resolve.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -18,6 +18,6 @@ if (!importLine.test(entry)) {
 const inlined = presence.replace(/^export /gm, '')
 const out = entry.replace(importLine, '') + `\n// ── inlined from src/presence.js ──\n${inlined}`
 
-mkdirSync(join(root, 'dist'), { recursive: true })
-writeFileSync(join(root, 'dist/plugin.js'), out)
-console.log('wrote dist/plugin.js')
+mkdirSync(join(root, 'desktop'), { recursive: true })
+writeFileSync(join(root, 'desktop/plugin.js'), out)
+console.log('wrote desktop/plugin.js')

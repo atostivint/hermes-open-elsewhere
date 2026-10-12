@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { collectElsewhere, encodeEntry, KEY_PREFIX, sameSet, TTL_MS } from '../src/presence.js'
+import {
+  collectElsewhere,
+  encodeEntry,
+  KEY_PREFIX,
+  MAX_BACKOFF_MS,
+  mergeElsewhere,
+  nextPollDelay,
+  sameMap,
+  TTL_MS,
+  WINDOW_LABEL
+} from '../src/presence.js'
 
 const NOW = 1_000_000
 const SELF = `${KEY_PREFIX}self`
@@ -34,7 +44,35 @@ test('garbage and foreign keys never throw or leak in', () => {
   assert.equal(open.size, 0)
 })
 
-test('sameSet is order-insensitive and size-aware', () => {
-  assert.ok(sameSet(new Set(['a', 'b']), new Set(['b', 'a'])))
-  assert.ok(!sameSet(new Set(['a']), new Set(['a', 'b'])))
+test('another client names itself; the Desktop surface (this app) never dots a row', () => {
+  const merged = mergeElsewhere(new Set(), [
+    { session_id: 's1', surface: 'bighelp' },
+    { session_id: 's2', surface: 'desktop' },
+    { session_id: 's3', surface: 'Desktop' }
+  ])
+
+  assert.deepEqual([...merged], [['s1', 'bighelp']])
+})
+
+test('a named holder wins over a window peer on the same session; window-only rows keep the window label', () => {
+  const merged = mergeElsewhere(new Set(['s1', 's2']), [{ session_id: 's1', surface: 'tui' }])
+
+  assert.equal(merged.get('s1'), 'tui')
+  assert.equal(merged.get('s2'), WINDOW_LABEL)
+})
+
+test('a malformed backend payload degrades to window-only', () => {
+  assert.equal(mergeElsewhere(new Set(['a']), null).size, 1)
+  assert.equal(mergeElsewhere(new Set(), [null, {}, { session_id: 's', surface: '' }]).size, 0)
+})
+
+test('sameMap compares labels, not just ids', () => {
+  assert.ok(sameMap(new Map([['a', 'x']]), new Map([['a', 'x']])))
+  assert.ok(!sameMap(new Map([['a', 'x']]), new Map([['a', 'y']])))
+  assert.ok(!sameMap(new Map([['a', 'x']]), new Map()))
+})
+
+test('poll backoff grows with failures and is capped', () => {
+  assert.ok(nextPollDelay(1) > nextPollDelay(0))
+  assert.equal(nextPollDelay(50), MAX_BACKOFF_MS)
 })

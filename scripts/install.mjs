@@ -1,4 +1,4 @@
-// Copies dist/plugin.js into <hermes home>/desktop-plugins/open-elsewhere/.
+// Copies desktop/plugin.js into <hermes home>/desktop-plugins/open-elsewhere/.
 // Usage: node scripts/install.mjs [hermesHome]
 // Home resolution mirrors hermes_constants: $HERMES_HOME, else %LOCALAPPDATA%\hermes
 // on Windows, else ~/.hermes.
@@ -21,5 +21,5 @@ const home = process.argv[2] || process.env.HERMES_HOME || defaultHome()
 const dest = join(home, 'desktop-plugins', 'open-elsewhere')
 
 mkdirSync(dest, { recursive: true })
-copyFileSync(join(root, 'dist/plugin.js'), join(dest, 'plugin.js'))
+copyFileSync(join(root, 'desktop/plugin.js'), join(dest, 'plugin.js'))
 console.log(`installed -> ${join(dest, 'plugin.js')}`)

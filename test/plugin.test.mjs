@@ -1,5 +1,5 @@
-// Wiring test: runs the BUILT plugin.js against a stub SDK/React and a fake
-// localStorage, the way the runtime loader would (specifiers rewritten).
+// Wiring test: runs the BUILT desktop/plugin.js against a stub SDK/React, a fake
+// localStorage and a fake ctx.rest, the way the runtime loader would (specifiers rewritten).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -18,21 +18,17 @@ globalThis.localStorage = {
   setItem: (key, value) => store.set(key, value)
 }
 
-let focused = 'sess-1'
-const focusListeners = new Set()
-
 globalThis.window = new EventTarget()
 
 globalThis.__stubs = {
   host: {
     state: {
       focusedStoredSessionId: {
-        get: () => focused,
+        get: () => 'sess-1',
         subscribe: fn => {
-          focusListeners.add(fn)
           fn()
 
-          return () => focusListeners.delete(fn)
+          return () => {}
         }
       }
     }
@@ -43,7 +39,7 @@ globalThis.__stubs = {
   useSyncExternalStore: (subscribe, snapshot) => snapshot()
 }
 
-const source = readFileSync(new URL('../dist/plugin.js', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
   .replace(/^import .*$/gm, '')
   .replace('export default', 'globalThis.__plugin =')
 
@@ -51,7 +47,9 @@ new Function(
   'const { host, jsx, SESSION_ROW_AREAS, Tip, useSyncExternalStore } = globalThis.__stubs;' + source
 )()
 
-function load() {
+const settle = () => new Promise(resolve => setTimeout(resolve, 0))
+
+function load(rest) {
   const registered = []
   const disposers = []
   const intervals = []
@@ -60,30 +58,82 @@ function load() {
     addEventListener: (target, type, fn) => target.addEventListener(type, fn),
     onDispose: fn => disposers.push(fn),
     register: contribution => registered.push(contribution),
+    rest,
     setInterval: fn => intervals.push(fn)
   })
 
-  return { disposers, registered }
+  // What the row slot would paint for a session: the dot's tooltip label, or null.
+  const paints = id => {
+    const dot = registered[0].data.render({ sessionId: id }).type({ sessionId: id })
+
+    return dot ? dot.props.label : null
+  }
+
+  return { disposers, intervals, paints, registered }
 }
 
-const dotFor = (registered, sessionId) => registered[0].data.render({ sessionId })
+test('a session open in a peer window is dotted, one open only here is not; the entry is removed on dispose', async () => {
+  const { disposers, paints, registered } = load(async () => ({ ok: true, holders: [] }))
 
-test('publishes this window under its own key and dots rows open in a peer window', () => {
-  const { disposers, registered } = load()
-
+  await settle()
   assert.equal(registered[0].area, 'sessionRow.leading')
   assert.equal([...store.keys()].filter(k => k.startsWith(KEY_PREFIX)).length, 1)
 
   store.set(`${KEY_PREFIX}peer`, encodeEntry(['sess-2'], Date.now()))
   window.dispatchEvent(new Event('storage'))
 
-  // ElsewhereDot is a component: call it to see what it would paint.
-  const paints = id => registered[0].data.render({ sessionId: id }).type({ sessionId: id })
-
-  assert.ok(paints('sess-2'), 'peer-open session gets a dot')
-  assert.equal(paints('sess-1'), null, 'a session only open here gets none')
+  assert.equal(paints('sess-2'), 'Also open in another window')
+  assert.equal(paints('sess-1'), null)
   assert.equal(paints('sess-3'), null)
 
   disposers.forEach(fn => fn())
-  assert.equal([...store.keys()].filter(k => k !== `${KEY_PREFIX}peer`).length, 0, 'own entry removed on dispose')
+  store.delete(`${KEY_PREFIX}peer`)
+  assert.equal(store.size, 0, 'own entry removed on dispose')
+})
+
+test('a session another client holds (backend /holders) is dotted with that client named', async () => {
+  const calls = []
+
+  const { disposers, paints } = load(async (path, opts) => {
+    calls.push([path, opts.timeoutMs])
+
+    return {
+      ok: true,
+      holders: [
+        { session_id: 'sess-9', surface: 'bighelp', age_s: 3 },
+        { session_id: 'sess-1', surface: 'desktop', age_s: 3 }
+      ]
+    }
+  })
+
+  await settle()
+
+  assert.deepEqual(calls[0], ['/holders', 8000])
+  assert.equal(paints('sess-9'), 'Also open in bighelp')
+  assert.equal(paints('sess-1'), null, "the Desktop's own lease never dots a row")
+
+  disposers.forEach(fn => fn())
+})
+
+test('a server without the backend half keeps the window source working and backs off instead of polling every beat', async () => {
+  let calls = 0
+
+  const { disposers, intervals, paints } = load(async () => {
+    calls += 1
+    throw new Error('404')
+  })
+
+  await settle()
+  assert.equal(calls, 1)
+
+  intervals.forEach(beat => beat())
+  await settle()
+  assert.equal(calls, 1, 'the next heartbeat is inside the backoff window')
+
+  store.set(`${KEY_PREFIX}peer`, encodeEntry(['sess-2'], Date.now()))
+  window.dispatchEvent(new Event('storage'))
+  assert.equal(paints('sess-2'), 'Also open in another window')
+
+  disposers.forEach(fn => fn())
+  store.clear()
 })

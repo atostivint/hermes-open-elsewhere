@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Hermes Desktop plugin: dot a sidebar session row when it is open in another window.",
   "scripts": {
-    "build": "node scripts/build.mjs && node --check dist/plugin.js",
+    "build": "node scripts/build.mjs && node --check desktop/plugin.js",
     "test": "node --test test/plugin.test.mjs test/presence.test.mjs",
     "install:plugin": "node scripts/build.mjs && node scripts/install.mjs"
   }

@@ -1,11 +1,15 @@
 /**
- * open-elsewhere — dots a sidebar session row when that conversation is open in
- * another Hermes Desktop window. Desktop-only by construction: it is a renderer
- * plugin that decorates `sessionRow.leading`.
+ * open-elsewhere — dots a sidebar session row when that conversation is held
+ * elsewhere: in another Hermes Desktop window, or by another client (iPhone app,
+ * terminal, messaging gateway) that owns the session lease. Desktop-only by
+ * construction: a renderer plugin decorating `sessionRow.leading`.
  *
- * Windows are separate renderers, so each one publishes the stored session it
- * has focused to localStorage (shared across same-origin windows, with a
- * `storage` event on every other window) and reads everyone else's.
+ * Two sources, merged into one id -> label map:
+ *  - other windows: each window publishes its focused stored session to
+ *    localStorage (shared across same-origin windows, `storage` event elsewhere);
+ *  - other clients: the backend half (`dashboard/plugin_api.py`, GET /holders)
+ *    reads the active-session registry behind SESSION_NOT_OWNED. Without it on the
+ *    server the poll backs off and only the window source is live.
  *
  * Edit this file, then `node scripts/build.mjs`: presence.js is inlined to give
  * the single plugin.js the runtime loader accepts.
@@ -14,14 +18,16 @@
 import { host, SESSION_ROW_AREAS, Tip } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
 import { useSyncExternalStore } from 'react'
-import { collectElsewhere, encodeEntry, HEARTBEAT_MS, KEY_PREFIX, sameSet } from './presence.js'
+import { collectElsewhere, encodeEntry, HEARTBEAT_MS, KEY_PREFIX, mergeElsewhere, nextPollDelay, sameMap } from './presence.js'
 
 const DOT_COLOR = '#f59e0b'
 
 function createPresence() {
   const selfKey = `${KEY_PREFIX}${Math.random().toString(36).slice(2)}`
   const listeners = new Set()
-  let elsewhere = new Set()
+  let windowIds = new Set()
+  let holders = []
+  let elsewhere = new Map()
 
   const read = () => {
     const entries = []
@@ -37,6 +43,17 @@ function createPresence() {
     return entries
   }
 
+  const rebuild = () => {
+    const next = mergeElsewhere(windowIds, holders)
+
+    // Keep the snapshot identity on no-ops: useSyncExternalStore re-renders
+    // every row on a new reference.
+    if (!sameMap(next, elsewhere)) {
+      elsewhere = next
+      listeners.forEach(notify => notify())
+    }
+  }
+
   return {
     publish() {
       const id = host.state.focusedStoredSessionId.get()
@@ -46,15 +63,13 @@ function createPresence() {
     retire() {
       localStorage.removeItem(selfKey)
     },
-    refresh() {
-      const next = collectElsewhere(read(), selfKey, Date.now())
-
-      // Keep the snapshot identity on no-ops: useSyncExternalStore re-renders
-      // every row on a new reference.
-      if (!sameSet(next, elsewhere)) {
-        elsewhere = next
-        listeners.forEach(notify => notify())
-      }
+    refreshWindows() {
+      windowIds = collectElsewhere(read(), selfKey, Date.now())
+      rebuild()
+    },
+    setHolders(next) {
+      holders = next
+      rebuild()
     },
     snapshot: () => elsewhere,
     subscribe(notify) {
@@ -68,21 +83,28 @@ function createPresence() {
 export default {
   id: 'open-elsewhere',
   name: 'Open elsewhere',
-  description: 'Marks a session in the sidebar when it is also open in another Hermes window.',
+  description: 'Marks a session in the sidebar when it is also open in another window or client.',
   register(ctx) {
     const presence = createPresence()
+    let disposed = false
+    let polling = false
+    let failures = 0
+    let nextPollAt = 0
 
     function ElsewhereDot({ sessionId }) {
       const open = useSyncExternalStore(presence.subscribe, presence.snapshot)
+      const holder = open.get(sessionId)
 
-      if (!open.has(sessionId)) {
+      if (!holder) {
         return null
       }
 
+      const label = `Also open in ${holder}`
+
       return jsx(Tip, {
-        label: 'Also open in another window',
+        label,
         children: jsx('span', {
-          'aria-label': 'Also open in another window',
+          'aria-label': label,
           role: 'img',
           style: {
             backgroundColor: DOT_COLOR,
@@ -97,9 +119,38 @@ export default {
       })
     }
 
+    async function pollHolders() {
+      if (polling || Date.now() < nextPollAt) {
+        return
+      }
+
+      polling = true
+
+      try {
+        const reply = await ctx.rest('/holders', { timeoutMs: 8000 })
+
+        if (!disposed) {
+          presence.setHolders(reply?.ok ? reply.holders : [])
+        }
+
+        failures = 0
+      } catch {
+        // A decoration never surfaces an error: no backend half, or the server is away.
+        failures += 1
+
+        if (!disposed) {
+          presence.setHolders([])
+        }
+      } finally {
+        polling = false
+        nextPollAt = Date.now() + nextPollDelay(failures)
+      }
+    }
+
     const sync = () => {
       presence.publish()
-      presence.refresh()
+      presence.refreshWindows()
+      void pollHolders()
     }
 
     ctx.register({
@@ -109,9 +160,12 @@ export default {
     })
 
     ctx.onDispose(host.state.focusedStoredSessionId.subscribe(sync))
-    ctx.addEventListener(window, 'storage', () => presence.refresh())
+    ctx.addEventListener(window, 'storage', () => presence.refreshWindows())
     ctx.addEventListener(window, 'pagehide', () => presence.retire())
     ctx.setInterval(sync, HEARTBEAT_MS)
-    ctx.onDispose(() => presence.retire())
+    ctx.onDispose(() => {
+      disposed = true
+      presence.retire()
+    })
   }
 }
