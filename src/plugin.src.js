@@ -1,5 +1,5 @@
 /**
- * open-elsewhere — dots a sidebar session row when that conversation is held
+ * open-elsewhere — puts a lock on a sidebar session row when that conversation is held
  * elsewhere: in another Hermes Desktop window, or by another client (iPhone app,
  * terminal, messaging gateway) that owns the session lease. Desktop-only by
  * construction: a renderer plugin decorating `sessionRow.leading`.
@@ -20,7 +20,7 @@ import { jsx } from 'react/jsx-runtime'
 import { useSyncExternalStore } from 'react'
 import { collectElsewhere, encodeEntry, HEARTBEAT_MS, KEY_PREFIX, mergeElsewhere, nextPollDelay, sameMap } from './presence.js'
 
-const DOT_COLOR = '#f59e0b'
+const LOCK_COLOR = '#f59e0b'
 
 function createPresence() {
   const selfKey = `${KEY_PREFIX}${Math.random().toString(36).slice(2)}`
@@ -91,7 +91,7 @@ export default {
     let failures = 0
     let nextPollAt = 0
 
-    function ElsewhereDot({ sessionId }) {
+    function ElsewhereLock({ sessionId }) {
       const open = useSyncExternalStore(presence.subscribe, presence.snapshot)
       const holder = open.get(sessionId)
 
@@ -99,22 +99,24 @@ export default {
         return null
       }
 
-      const label = `Also open in ${holder}`
+      const label = `Open in ${holder}: not available here`
 
       return jsx(Tip, {
         label,
-        children: jsx('span', {
+        children: jsx('svg', {
           'aria-label': label,
+          fill: 'none',
           role: 'img',
-          style: {
-            backgroundColor: DOT_COLOR,
-            borderRadius: '9999px',
-            display: 'inline-block',
-            flex: 'none',
-            height: '0.375rem',
-            marginInline: '0.25rem',
-            width: '0.375rem'
-          }
+          stroke: LOCK_COLOR,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          strokeWidth: 2,
+          style: { display: 'inline-block', flex: 'none', height: '0.75rem', marginInline: '0.25rem', width: '0.75rem' },
+          viewBox: '0 0 24 24',
+          children: [
+            jsx('rect', { height: 11, rx: 2, width: 18, x: 3, y: 11 }, 'body'),
+            jsx('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }, 'shackle')
+          ]
         })
       })
     }
@@ -154,9 +156,9 @@ export default {
     }
 
     ctx.register({
-      id: 'dot',
+      id: 'lock',
       area: SESSION_ROW_AREAS.leading,
-      data: { render: ({ sessionId }) => jsx(ElsewhereDot, { sessionId }) }
+      data: { render: ({ sessionId }) => jsx(ElsewhereLock, { sessionId }) }
     })
 
     ctx.onDispose(host.state.focusedStoredSessionId.subscribe(sync))

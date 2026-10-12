@@ -52,6 +52,22 @@ export function collectElsewhere(entries, selfKey, now, ttl = TTL_MS) {
   return open
 }
 
+/** " for 5 min" for a holder's lease age in seconds; empty when unknown. Coarse on purpose:
+ *  the label is part of the merged map, and every change re-renders every row. */
+export function formatHeldFor(ageSeconds) {
+  if (!Number.isFinite(ageSeconds) || ageSeconds < 0) {
+    return ''
+  }
+
+  const minutes = Math.floor(ageSeconds / 60)
+
+  if (minutes < 1) {
+    return ' for <1 min'
+  }
+
+  return minutes < 60 ? ` for ${minutes} min` : ` for ${Math.floor(minutes / 60)} h`
+}
+
 /** session id -> who holds it. A backend holder (named surface) wins over a window peer. */
 export function mergeElsewhere(windowIds, holders) {
   const merged = new Map([...windowIds].map(id => [id, WINDOW_LABEL]))
@@ -61,7 +77,7 @@ export function mergeElsewhere(windowIds, holders) {
     const surface = typeof holder?.surface === 'string' ? holder.surface.trim() : ''
 
     if (typeof id === 'string' && id && surface && surface.toLowerCase() !== OWN_SURFACE) {
-      merged.set(id, surface)
+      merged.set(id, surface + formatHeldFor(holder.age_s))
     }
   }
 
