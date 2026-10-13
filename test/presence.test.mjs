@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   collectElsewhere,
   encodeEntry,
+  formatHeldFor,
   KEY_PREFIX,
   MAX_BACKOFF_MS,
   mergeElsewhere,
@@ -75,4 +76,13 @@ test('sameMap compares labels, not just ids', () => {
 test('poll backoff grows with failures and is capped', () => {
   assert.ok(nextPollDelay(1) > nextPollDelay(0))
   assert.equal(nextPollDelay(50), MAX_BACKOFF_MS)
+})
+
+test('the holder label carries a coarse age, and none when the backend sent no age', () => {
+  assert.equal(formatHeldFor(5), ' for <1 min')
+  assert.equal(formatHeldFor(125), ' for 2 min')
+  assert.equal(formatHeldFor(7300), ' for 2 h')
+  assert.equal(formatHeldFor(undefined), '')
+  assert.equal(formatHeldFor(-1), '')
+  assert.equal(mergeElsewhere(new Set(), [{ session_id: 's1', surface: 'tui', age_s: 600 }]).get('s1'), 'tui for 10 min')
 })

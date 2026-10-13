@@ -62,7 +62,7 @@ function load(rest) {
     setInterval: fn => intervals.push(fn)
   })
 
-  // What the row slot would paint for a session: the dot's tooltip label, or null.
+  // What the row slot would paint for a session: the lock's tooltip label, or null.
   const paints = id => {
     const dot = registered[0].data.render({ sessionId: id }).type({ sessionId: id })
 
@@ -72,7 +72,7 @@ function load(rest) {
   return { disposers, intervals, paints, registered }
 }
 
-test('a session open in a peer window is dotted, one open only here is not; the entry is removed on dispose', async () => {
+test('a session open in a peer window is locked, one open only here is not; the entry is removed on dispose', async () => {
   const { disposers, paints, registered } = load(async () => ({ ok: true, holders: [] }))
 
   await settle()
@@ -82,7 +82,7 @@ test('a session open in a peer window is dotted, one open only here is not; the 
   store.set(`${KEY_PREFIX}peer`, encodeEntry(['sess-2'], Date.now()))
   window.dispatchEvent(new Event('storage'))
 
-  assert.equal(paints('sess-2'), 'Also open in another window')
+  assert.equal(paints('sess-2'), 'Open in another window: not available here')
   assert.equal(paints('sess-1'), null)
   assert.equal(paints('sess-3'), null)
 
@@ -91,7 +91,7 @@ test('a session open in a peer window is dotted, one open only here is not; the 
   assert.equal(store.size, 0, 'own entry removed on dispose')
 })
 
-test('a session another client holds (backend /holders) is dotted with that client named', async () => {
+test('a session another client holds (backend /holders) is locked with that client named', async () => {
   const calls = []
 
   const { disposers, paints } = load(async (path, opts) => {
@@ -109,8 +109,8 @@ test('a session another client holds (backend /holders) is dotted with that clie
   await settle()
 
   assert.deepEqual(calls[0], ['/holders', 8000])
-  assert.equal(paints('sess-9'), 'Also open in bighelp')
-  assert.equal(paints('sess-1'), null, "the Desktop's own lease never dots a row")
+  assert.equal(paints('sess-9'), 'Open in bighelp for <1 min: not available here')
+  assert.equal(paints('sess-1'), null, "the Desktop's own lease never locks a row")
 
   disposers.forEach(fn => fn())
 })
@@ -132,7 +132,7 @@ test('a server without the backend half keeps the window source working and back
 
   store.set(`${KEY_PREFIX}peer`, encodeEntry(['sess-2'], Date.now()))
   window.dispatchEvent(new Event('storage'))
-  assert.equal(paints('sess-2'), 'Also open in another window')
+  assert.equal(paints('sess-2'), 'Open in another window: not available here')
 
   disposers.forEach(fn => fn())
   store.clear()

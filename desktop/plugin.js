@@ -1,5 +1,5 @@
 /**
- * open-elsewhere — dots a sidebar session row when that conversation is held
+ * open-elsewhere — puts a lock on a sidebar session row when that conversation is held
  * elsewhere: in another Hermes Desktop window, or by another client (iPhone app,
  * terminal, messaging gateway) that owns the session lease. Desktop-only by
  * construction: a renderer plugin decorating `sessionRow.leading`.
@@ -19,7 +19,7 @@ import { host, SESSION_ROW_AREAS, Tip } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
 import { useSyncExternalStore } from 'react'
 
-const DOT_COLOR = '#f59e0b'
+const LOCK_COLOR = '#f59e0b'
 
 function createPresence() {
   const selfKey = `${KEY_PREFIX}${Math.random().toString(36).slice(2)}`
@@ -90,7 +90,7 @@ export default {
     let failures = 0
     let nextPollAt = 0
 
-    function ElsewhereDot({ sessionId }) {
+    function ElsewhereLock({ sessionId }) {
       const open = useSyncExternalStore(presence.subscribe, presence.snapshot)
       const holder = open.get(sessionId)
 
@@ -98,22 +98,24 @@ export default {
         return null
       }
 
-      const label = `Also open in ${holder}`
+      const label = `Open in ${holder}: not available here`
 
       return jsx(Tip, {
         label,
-        children: jsx('span', {
+        children: jsx('svg', {
           'aria-label': label,
+          fill: 'none',
           role: 'img',
-          style: {
-            backgroundColor: DOT_COLOR,
-            borderRadius: '9999px',
-            display: 'inline-block',
-            flex: 'none',
-            height: '0.375rem',
-            marginInline: '0.25rem',
-            width: '0.375rem'
-          }
+          stroke: LOCK_COLOR,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          strokeWidth: 2,
+          style: { display: 'inline-block', flex: 'none', height: '0.75rem', marginInline: '0.25rem', width: '0.75rem' },
+          viewBox: '0 0 24 24',
+          children: [
+            jsx('rect', { height: 11, rx: 2, width: 18, x: 3, y: 11 }, 'body'),
+            jsx('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }, 'shackle')
+          ]
         })
       })
     }
@@ -153,9 +155,9 @@ export default {
     }
 
     ctx.register({
-      id: 'dot',
+      id: 'lock',
       area: SESSION_ROW_AREAS.leading,
-      data: { render: ({ sessionId }) => jsx(ElsewhereDot, { sessionId }) }
+      data: { render: ({ sessionId }) => jsx(ElsewhereLock, { sessionId }) }
     })
 
     ctx.onDispose(host.state.focusedStoredSessionId.subscribe(sync))
@@ -224,6 +226,22 @@ function collectElsewhere(entries, selfKey, now, ttl = TTL_MS) {
   return open
 }
 
+/** " for 5 min" for a holder's lease age in seconds; empty when unknown. Coarse on purpose:
+ *  the label is part of the merged map, and every change re-renders every row. */
+function formatHeldFor(ageSeconds) {
+  if (!Number.isFinite(ageSeconds) || ageSeconds < 0) {
+    return ''
+  }
+
+  const minutes = Math.floor(ageSeconds / 60)
+
+  if (minutes < 1) {
+    return ' for <1 min'
+  }
+
+  return minutes < 60 ? ` for ${minutes} min` : ` for ${Math.floor(minutes / 60)} h`
+}
+
 /** session id -> who holds it. A backend holder (named surface) wins over a window peer. */
 function mergeElsewhere(windowIds, holders) {
   const merged = new Map([...windowIds].map(id => [id, WINDOW_LABEL]))
@@ -233,7 +251,7 @@ function mergeElsewhere(windowIds, holders) {
     const surface = typeof holder?.surface === 'string' ? holder.surface.trim() : ''
 
     if (typeof id === 'string' && id && surface && surface.toLowerCase() !== OWN_SURFACE) {
-      merged.set(id, surface)
+      merged.set(id, surface + formatHeldFor(holder.age_s))
     }
   }
 
