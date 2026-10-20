@@ -1,9 +1,9 @@
 {
   "name": "hermes-open-elsewhere",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Hermes Desktop plugin: dot a sidebar session row when it is open in another window.",
+  "description": "Hermes Desktop plugin: lock a sidebar session row when it is held in another window or client.",
   "scripts": {
     "build": "node scripts/build.mjs && node --check desktop/plugin.js",
     "test": "node --test test/plugin.test.mjs test/presence.test.mjs",
