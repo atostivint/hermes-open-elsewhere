@@ -33,6 +33,7 @@ globalThis.__stubs = {
       }
     }
   },
+  Codicon: 'Codicon',
   jsx: (type, props) => ({ type, props }),
   SESSION_ROW_AREAS: { leading: 'sessionRow.leading' },
   Tip: 'Tip',
@@ -44,7 +45,7 @@ const source = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'u
   .replace('export default', 'globalThis.__plugin =')
 
 new Function(
-  'const { host, jsx, SESSION_ROW_AREAS, Tip, useSyncExternalStore } = globalThis.__stubs;' + source
+  'const { Codicon, host, jsx, SESSION_ROW_AREAS, Tip, useSyncExternalStore } = globalThis.__stubs;' + source
 )()
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0))
@@ -63,13 +64,10 @@ function load(rest) {
   })
 
   // What the row slot would paint for a session: the lock's tooltip label, or null.
-  const paints = id => {
-    const dot = registered[0].data.render({ sessionId: id }).type({ sessionId: id })
+  const lockFor = id => registered[0].data.render({ sessionId: id }).type({ sessionId: id })
+  const paints = id => lockFor(id)?.props.label ?? null
 
-    return dot ? dot.props.label : null
-  }
-
-  return { disposers, intervals, paints, registered }
+  return { disposers, intervals, lockFor, paints, registered }
 }
 
 test('a session open in a peer window is locked, one open only here is not; the entry is removed on dispose', async () => {
@@ -94,13 +92,13 @@ test('a session open in a peer window is locked, one open only here is not; the 
 test('a session another client holds (backend /holders) is locked with that client named', async () => {
   const calls = []
 
-  const { disposers, paints } = load(async (path, opts) => {
+  const { disposers, lockFor, paints } = load(async (path, opts) => {
     calls.push([path, opts.timeoutMs])
 
     return {
       ok: true,
       holders: [
-        { session_id: 'sess-9', surface: 'bighelp', age_s: 3 },
+        { session_id: 'sess-9', surface: 'gateway:telegram', age_s: 3 },
         { session_id: 'sess-1', surface: 'desktop', age_s: 3 }
       ]
     }
@@ -109,8 +107,15 @@ test('a session another client holds (backend /holders) is locked with that clie
   await settle()
 
   assert.deepEqual(calls[0], ['/holders', 8000])
-  assert.equal(paints('sess-9'), 'Open in bighelp for <1 min: not available here')
+  assert.equal(paints('sess-9'), 'Open in Telegram for <1 min: not available here')
   assert.equal(paints('sess-1'), null, "the Desktop's own lease never locks a row")
+
+  const { props } = lockFor('sess-9')
+  const icon = props.children
+
+  assert.equal(icon.props.role, 'img')
+  assert.equal(icon.props['aria-label'], props.label)
+  assert.deepEqual(icon.props.children, { type: 'Codicon', props: { name: 'lock', size: '0.75rem' } })
 
   disposers.forEach(fn => fn())
 })

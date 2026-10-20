@@ -5,6 +5,7 @@ import {
   collectElsewhere,
   encodeEntry,
   formatHeldFor,
+  holderLabel,
   KEY_PREFIX,
   MAX_BACKOFF_MS,
   mergeElsewhere,
@@ -58,7 +59,7 @@ test('another client names itself; the Desktop surface (this app) never dots a r
 test('a named holder wins over a window peer on the same session; window-only rows keep the window label', () => {
   const merged = mergeElsewhere(new Set(['s1', 's2']), [{ session_id: 's1', surface: 'tui' }])
 
-  assert.equal(merged.get('s1'), 'tui')
+  assert.equal(merged.get('s1'), 'a terminal')
   assert.equal(merged.get('s2'), WINDOW_LABEL)
 })
 
@@ -84,5 +85,31 @@ test('the holder label carries a coarse age, and none when the backend sent no a
   assert.equal(formatHeldFor(7300), ' for 2 h')
   assert.equal(formatHeldFor(undefined), '')
   assert.equal(formatHeldFor(-1), '')
-  assert.equal(mergeElsewhere(new Set(), [{ session_id: 's1', surface: 'tui', age_s: 600 }]).get('s1'), 'tui for 10 min')
+  assert.equal(mergeElsewhere(new Set(), [{ session_id: 's1', surface: 'tui', age_s: 600 }]).get('s1'), 'a terminal for 10 min')
+})
+
+test('raw lease surfaces read as people would say them', () => {
+  assert.equal(holderLabel('gateway:telegram'), 'Telegram')
+  assert.equal(holderLabel('gateway:whatsapp'), 'WhatsApp')
+  assert.equal(holderLabel('gateway:bluebubbles'), 'iMessage')
+  assert.equal(holderLabel('gateway:some_new_chat'), 'Some new chat')
+  assert.equal(holderLabel('gateway'), 'the messaging gateway')
+  assert.equal(holderLabel('gateway:'), 'the messaging gateway')
+  assert.equal(holderLabel('cli'), 'a terminal')
+  assert.equal(holderLabel('tui'), 'a terminal')
+  assert.equal(holderLabel('acp'), 'an editor')
+  assert.equal(holderLabel('telegram'), 'Telegram')
+  assert.equal(holderLabel('  bighelp '), 'bighelp')
+})
+
+test('surface matching is case-insensitive and desktop stays excluded, gateway or not', () => {
+  assert.equal(holderLabel('Gateway:Discord'), 'Discord')
+  assert.equal(holderLabel('CLI'), 'a terminal')
+
+  const merged = mergeElsewhere(new Set(), [
+    { session_id: 's1', surface: 'Gateway:Slack', age_s: 300 },
+    { session_id: 's2', surface: ' DESKTOP ' }
+  ])
+
+  assert.deepEqual([...merged], [['s1', 'Slack for 5 min']])
 })

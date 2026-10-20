@@ -12,6 +12,54 @@ export const MAX_BACKOFF_MS = 60000
 export const OWN_SURFACE = 'desktop'
 export const WINDOW_LABEL = 'another window'
 
+// Lease surfaces are raw strings: `gateway:<platform>` (gateway/run_busy.py), `cli`, `tui`,
+// `desktop`, and whatever a plugin session is tagged with. Platform names that a plain
+// capitalised first letter would get wrong.
+const PLATFORM_NAMES = {
+  bluebubbles: 'iMessage',
+  dingtalk: 'DingTalk',
+  imessage: 'iMessage',
+  qqbot: 'QQ',
+  sms: 'SMS',
+  wecom: 'WeCom',
+  wecom_callback: 'WeCom',
+  weixin: 'WeChat',
+  whatsapp: 'WhatsApp',
+  whatsapp_cloud: 'WhatsApp'
+}
+
+const PLAIN_PLATFORMS = new Set(['discord', 'email', 'matrix', 'mattermost', 'signal', 'slack', 'telegram'])
+const capitalise = text => text.charAt(0).toUpperCase() + text.slice(1)
+const platformName = key => PLATFORM_NAMES[key] ?? capitalise(key.replace(/_/g, ' '))
+
+/** Human label for a lease `surface`: "Telegram", "a terminal", "the messaging gateway".
+ *  Unknown surfaces come back trimmed but otherwise as sent. */
+export function holderLabel(surface) {
+  const raw = typeof surface === 'string' ? surface.trim() : ''
+  const key = raw.toLowerCase()
+
+  if (key === 'cli' || key === 'tui') {
+    return 'a terminal'
+  }
+
+  if (key === 'gateway') {
+    return 'the messaging gateway'
+  }
+
+  if (key === 'acp') {
+    return 'an editor'
+  }
+
+  if (key.startsWith('gateway:')) {
+    const platform = key.slice('gateway:'.length).trim()
+
+    return platform ? platformName(platform) : 'the messaging gateway'
+  }
+
+  // A plugin session tagged with a bare platform name ("telegram") reads the same way.
+  return key in PLATFORM_NAMES || PLAIN_PLATFORMS.has(key) ? platformName(key) : raw
+}
+
 export function encodeEntry(ids, now) {
   return JSON.stringify({ ids: ids.filter(Boolean), ts: now })
 }
@@ -77,7 +125,7 @@ export function mergeElsewhere(windowIds, holders) {
     const surface = typeof holder?.surface === 'string' ? holder.surface.trim() : ''
 
     if (typeof id === 'string' && id && surface && surface.toLowerCase() !== OWN_SURFACE) {
-      merged.set(id, surface + formatHeldFor(holder.age_s))
+      merged.set(id, holderLabel(surface) + formatHeldFor(holder.age_s))
     }
   }
 

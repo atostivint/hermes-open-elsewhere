@@ -3,7 +3,9 @@
 name: open-elsewhere
 id: open-elsewhere
 kind: standalone
-version: 0.2.0
+version: 0.3.0
+# First stable release with the Desktop sessionRow slots (585e296db5d).
+requires_hermes: ">=0.21.6"
 description: >
   Marks a session in the Desktop sidebar when it is open in another Hermes window or
   another client (iPhone app, terminal, messaging gateway), before sending into it is

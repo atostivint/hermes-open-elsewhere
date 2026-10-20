@@ -15,12 +15,14 @@
  * the single plugin.js the runtime loader accepts.
  */
 
-import { host, SESSION_ROW_AREAS, Tip } from '@hermes/plugin-sdk'
+import { Codicon, host, SESSION_ROW_AREAS, Tip } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
 import { useSyncExternalStore } from 'react'
 import { collectElsewhere, encodeEntry, HEARTBEAT_MS, KEY_PREFIX, mergeElsewhere, nextPollDelay, sameMap } from './presence.js'
 
-const LOCK_COLOR = '#f59e0b'
+// The app's amber (StatusDot's warn tone is bg-amber-500). Tailwind only emits utilities the
+// app itself uses, so read its theme variable rather than rely on a class; hex if it is absent.
+const LOCK_COLOR = 'var(--color-amber-500, #f59e0b)'
 
 function createPresence() {
   const selfKey = `${KEY_PREFIX}${Math.random().toString(36).slice(2)}`
@@ -103,20 +105,12 @@ export default {
 
       return jsx(Tip, {
         label,
-        children: jsx('svg', {
+        // Codicon is aria-hidden, so the wrapper carries the accessible name.
+        children: jsx('span', {
           'aria-label': label,
-          fill: 'none',
           role: 'img',
-          stroke: LOCK_COLOR,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          strokeWidth: 2,
-          style: { display: 'inline-block', flex: 'none', height: '0.75rem', marginInline: '0.25rem', width: '0.75rem' },
-          viewBox: '0 0 24 24',
-          children: [
-            jsx('rect', { height: 11, rx: 2, width: 18, x: 3, y: 11 }, 'body'),
-            jsx('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }, 'shackle')
-          ]
+          style: { color: LOCK_COLOR, display: 'inline-flex', flex: 'none', marginInline: '0.25rem' },
+          children: jsx(Codicon, { name: 'lock', size: '0.75rem' })
         })
       })
     }
